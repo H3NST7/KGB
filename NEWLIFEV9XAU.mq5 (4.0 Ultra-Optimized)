@@ -1,0 +1,1465 @@
+//+------------------------------------------------------------------+
+//|                      NEWLIFEV9XAU.mq5 (4.0 Ultra-Optimized)     |
+//|                        Copyright 2025, H3NST7                    |
+//|                              www.H3NST7.com                      |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, H3NST7"
+#property link      "https://www.H3NST7.com"
+#property version   "4.0"
+#property strict
+
+// Standard includes
+#include <Trade\Trade.mqh>
+#include <Trade\OrderInfo.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\SymbolInfo.mqh>
+#include <Arrays\ArrayObj.mqh>
+
+// Custom includes - modular architecture for optimized compilation
+// Order of includes is important to avoid circular dependencies
+#include "Include\NEWLIFE_Constants.mqh"
+#include "Include\NEWLIFE_Utilities.mqh"
+#include "Include\NEWLIFE_Compiler.mqh"
+#include "Include\NEWLIFE_Indicators.mqh"
+#include "Include\NEWLIFE_RiskManagement.mqh"
+#include "Include\NEWLIFE_OrderExecution.mqh"
+#include "Include\NEWLIFE_PositionManagement.mqh"
+#include "Include\NEWLIFE_LiquidityEngine.mqh"
+#include "Include\NEWLIFE_Strategies.mqh"
+#include "Include\NEWLIFE_StrategyFactory.mqh"
+#include "Include\NEWLIFE_HFTEngine.mqh"  // HFT Engine include
+
+//+------------------------------------------------------------------+
+//| Input Parameters                                                 |
+//+------------------------------------------------------------------+
+// General Settings
+input string GeneralSettings = "--- General Settings ---";
+input bool   InpDebugMode = true;                  // Enable detailed logging
+input string InpSymbol = "XAUUSD";                 // Trading symbol
+input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M15;    // Trading timeframe
+input int    InpBaseMagicNumber = 17362562;        // Base magic number
+input int    InpOrderQueueSize = 100;              // Order queue size
+
+// Risk Management Settings
+input string RiskSettings = "--- Risk Management ---";
+input ENUM_RISK_PROFILE InpRiskProfile = RISK_ADAPTIVE; // Risk profile
+input double InpRiskPercentInput = 1.0;            // Base risk per trade (%)
+input double InpRiskPerTrade = 0.8;                // Risk factor for position sizing
+input double InpMaxDailyLoss = 2.5;                // Maximum daily drawdown (%)
+input double InpXAUUSDMaxRisk = 1.2;               // Maximum risk per trade for XAUUSD
+input ENUM_PROFIT_STRATEGY InpProfitStrategy = PROFIT_ADAPTIVE; // Profit taking strategy
+input ENUM_RECOVERY_MODE InpRecoveryMode = RECOVERY_FULL; // Recovery mode after drawdown
+
+// Trade Settings
+input string TradeSettings = "--- Trade Settings ---";
+input int    InpMaxTrades = 50;                    // Maximum total trades
+input int    InpMaxTradesPerDay = 30;              // Maximum trades per day
+input int    InpMinTimeBetweenTrades = 4;          // Minimum time between trades (seconds)
+input int    InpTradeCooldown = 4;                 // Cooldown after trade (seconds)
+input ENUM_EXECUTION_TYPE InpExecutionType = EXECUTION_ADAPTIVE; // Trade execution type
+input bool   InpTrailingEnabled = true;            // Enable trailing stops
+input double InpTrailingTrigger = 320.0;           // Points in profit to activate trailing
+input double InpTrailingStep = 125.0;              // Trailing stop step size
+input bool   InpEnablePartialClose = true;         // Enable partial position closing
+input double InpPartialClosePercent = 50.0;        // Percentage to close at first target
+
+// Indicator Settings
+input string IndicatorSettings = "--- Indicator Settings ---";
+input int    InpATRPeriod = 14;                    // ATR period
+input double InpATRMultiplierSLInput = 1.8;        // ATR multiplier for stop loss
+input double InpATRMultiplierTPInput = 8.5;        // ATR multiplier for take profit
+input double InpMinATR = 1.8;                      // Minimum ATR for trading
+input int    InpMATrendPeriodInput = 200;           // MA trend period
+input int    InpMAScalpPeriodInput = 100;           // MA scalping period
+input ENUM_MA_METHOD InpMAMethod = MODE_LWMA;      // Moving average method
+input int    InpRSIPeriod = 14;                    // RSI period
+input double InpRSIOverboughtInput = 70.0;         // RSI overbought level
+input double InpRSIOversoldInput = 30.0;           // RSI oversold level
+input int    InpADXPeriod = 14;                    // ADX period
+input double InpADXThreshold = 18.0;               // ADX threshold for trend strength
+input double InpRSI_Filter_Strength = 3.0;         // RSI filter strength (higher = stricter)
+input bool   InpUseAdditionalFilters = true;       // Use additional confirmation filters
+
+// Session Settings
+input string SessionSettings = "--- Session Settings ---";
+input ENUM_TRADING_SESSION InpActiveSession = SESSION_ALL; // Trading sessions
+input double InpAsianMultiplier = 0.5;             // Asian session risk multiplier
+input double InpLondonNYMultiplier = 1.5;          // London/NY session risk multiplier
+input bool   InpAvoidWeekendTrading = true;        // Avoid trading near weekend
+
+// Trading Filters
+input string FilterSettings = "--- Trading Filters ---";
+input double InpMaxSpread = 70.0;                  // Maximum allowed spread
+input bool   InpUseNewCandle = true;               // Wait for new candle for entry
+input bool   InpUseCorrelation = true;             // Use correlation filter
+input bool   InpUseNewsFilter = false;             // Use economic news filter
+input int    InpNewsBeforeMin = 60;                // Minutes before news to avoid trading
+input int    InpNewsAfterMin = 60;                 // Minutes after news to avoid trading
+input bool   InpUseTrendFilter = true;             // Use trend alignment filter
+
+// Execution Settings
+input string ExecutionSettings = "--- Execution Settings ---";
+input double InpSlippageInput = 3.0;               // Maximum allowed slippage
+input bool   InpAvoidHolidayTrading = true;        // Avoid trading on major holidays
+input bool   InpLogPerformance = true;             // Log performance metrics
+input bool   InpEnableEmergencyStop = true;        // Enable emergency stop on critical errors
+input int    InpMaxRetryAttempts = 5;              // Maximum retry attempts for operations
+
+// HFT Engine Settings
+input string HFTSettings = "--- HFT Engine Settings ---";
+input bool   InpEnableHFTEngine = true;            // Enable HFT Engine
+input ENUM_HFT_STRATEGY InpHFTStrategy = HFT_STRATEGY_ADAPTIVE; // HFT Strategy
+input double InpHFTRiskPercent = 0.5;              // HFT Risk per trade (%)
+input double InpHFTMaxSpread = 45.0;               // HFT Maximum allowed spread (points)
+input int    InpHFTMaxTradesPerHour = 10;          // HFT Maximum trades per hour
+input int    InpHFTMaxConsecutiveLosses = 3;       // HFT Maximum consecutive losses
+input double InpHFTMinProfitTarget = 1.0;          // HFT Minimum daily profit target (%)
+input double InpHFTMaxDailyLoss = 2.0;             // HFT Maximum daily loss (%)
+input bool   InpHFTAutoTakeover = true;            // HFT Auto-takeover when main strategies underperform
+
+//+------------------------------------------------------------------+
+//| Global Variables                                                 |
+//+------------------------------------------------------------------+
+// Core objects
+CTrade Trade;                         // Trade execution object
+COrderInfo OrderInfo;                 // Order information
+CPositionInfo PositionInfo;           // Position information
+CSymbolInfo SymbolInfo;               // Symbol information
+CLogger *Logger = NULL;               // Logging system
+CIndicatorManager *IndicatorMgr = NULL; // Indicator manager
+CRiskManager *RiskMgr = NULL;         // Risk manager
+COrderManager *OrderMgr = NULL;       // Order manager
+CPositionManager *PosMgr = NULL;      // Position manager
+CLiquidityAnalyzer *LiquidityAnalyzer = NULL; // Liquidity analyzer
+IStrategy *CurrentStrategy = NULL;    // Current active strategy
+CHFTEngine *HFTEngine = NULL;         // HFT Engine object
+
+// Trading state
+int MagicNumber = 0;                  // Unique identifier for this EA instance
+bool SystemInitialized = false;       // Initialization flag
+bool TradingEnabled = true;           // Flag to enable/disable trading
+datetime LastBarTime = 0;             // Time of last processed bar
+MqlTick LastTick;                     // Latest price tick data
+ENUM_MARKET_REGIME CurrentMarketRegime = REGIME_CONSOLIDATION; // Current market regime
+ENUM_LIQUIDITY_STATE CurrentLiquidityState = LIQUIDITY_MEDIUM; // Current liquidity state
+ENUM_POSITION_DIRECTION CurrentDirection = DIRECTION_NONE; // Current trading direction
+datetime TradingHaltUntil = 0;        // Time until trading can resume
+int BarsSinceLastTrade = 0;           // Bars since last trade
+datetime LastTradeTime = 0;           // Time of last trade
+int ConsecutiveLosses = 0;            // Count of consecutive losing trades
+int TotalTradesToday = 0;             // Count of trades today
+bool InitialBalanceSet = false;       // Flag to track initial balance setting
+bool HFTEngineActive = false;         // Flag for HFT Engine active state
+bool IsInTester = false;              // Flag for strategy tester mode
+
+// Account metrics
+double InitialBalance = 0.0;          // Starting account balance
+double PeakBalance = 0.0;             // Highest account balance achieved
+double DailyLoss = 0.0;               // Current daily loss percentage
+double EquityHigh = 0.0;              // Highest equity today
+
+// Parameter adjustments
+double CurrentRiskMultiplier = 1.0;   // Dynamic risk multiplier
+double CurrentATRMultiplierSL = 0.0;  // Current ATR SL multiplier
+double CurrentATRMultiplierTP = 0.0;  // Current ATR TP multiplier
+
+// Performance tracking
+int TotalTradesHistory = 0;           // Total trades taken
+int WinningTrades = 0;                // Number of winning trades
+int LosingTrades = 0;                 // Number of losing trades
+double TotalProfit = 0.0;             // Sum of all profits
+double TotalLoss = 0.0;               // Sum of all losses
+double LargestProfit = 0.0;           // Largest single profit
+double LargestLoss = 0.0;             // Largest single loss
+double AverageHoldingTime = 0.0;      // Average trade duration in hours
+
+// Module error tracking
+string LastErrorSource = "";          // Source of the last error
+string LastErrorMessage = "";         // Last error message
+datetime LastErrorTime = 0;           // Time of last error
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit() {
+   // Initialize error handling
+   LastErrorSource = "";
+   LastErrorMessage = "";
+   LastErrorTime = 0;
+   
+   // Reset initialization flag
+   SystemInitialized = false;
+   
+   // Check if in strategy tester
+   IsInTester = MQLInfoInteger(MQL_TESTER);
+   
+   // Setup magic number with improved uniqueness
+   MagicNumber = GenerateUniqueMagicNumber(InpBaseMagicNumber, InpSymbol);
+   
+   Print("Initializing NEWLIFE v4.0 EA with Magic: ", MagicNumber);
+   
+   // Step 1: Initialize logger first (needed for all other components)
+   Logger = new CLogger(InpDebugMode, "NEWLIFE_v4", InpLogPerformance);
+   if(Logger == NULL) {
+      Print("CRITICAL ERROR: Failed to create logger object");
+      return INIT_FAILED;
+   }
+   
+   Logger.Info("Initializing NEWLIFE v4.0 EA...");
+   
+   // Step 2: Load symbol properties
+   if(!SymbolInfo.Name(InpSymbol)) {
+      RecordError("OnInit", "Symbol not found: " + InpSymbol);
+      return CleanupAndFail();
+   }
+   
+   // Step 3: Initialize indicator manager with proper error handling
+   Logger.Info("Creating indicator manager...");
+   IndicatorMgr = new CIndicatorManager(InpSymbol, InpTimeframe);
+   if(IndicatorMgr == NULL) {
+      RecordError("OnInit", "Failed to create indicator manager");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing indicator manager...");
+   if(!IndicatorMgr.Initialize()) {
+      RecordError("OnInit", "Failed to initialize indicator manager");
+      return CleanupAndFail();
+   }
+   
+   // Step 4: Create indicator handles with proper error handling
+   Logger.Info("Creating indicators...");
+   if(!IndicatorMgr.CreateIndicators(InpATRPeriod, InpRSIPeriod, InpADXPeriod, 
+                                     InpMATrendPeriodInput, InpMAScalpPeriodInput, 
+                                     InpMAMethod)) {
+      RecordError("OnInit", "Failed to create indicator handles");
+      return CleanupAndFail();
+   }
+   
+   // Validate indicator manager
+   if(IsInTester || InpDebugMode) {
+      Logger.Info("Validating indicator manager initialization...");
+      Logger.Info("Will verify indicator values on first tick");
+   }
+   
+   // Step 5: Initialize risk manager with proper error handling
+   Logger.Info("Creating risk manager...");
+   RiskMgr = new CRiskManager(InpRiskPercentInput, InpMaxDailyLoss, InpRiskProfile);
+   if(RiskMgr == NULL) {
+      RecordError("OnInit", "Failed to create risk manager");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing risk manager...");
+   if(!RiskMgr.Initialize()) {
+      RecordError("OnInit", "Failed to initialize risk manager");
+      return CleanupAndFail();
+   }
+   
+   // Step 6: Initialize order manager with proper error handling
+   Logger.Info("Creating order manager...");
+   OrderMgr = new COrderManager(MagicNumber, InpOrderQueueSize, InpMaxRetryAttempts, 
+                               InpSlippageInput);
+   if(OrderMgr == NULL) {
+      RecordError("OnInit", "Failed to create order manager");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing order manager...");
+   if(!OrderMgr.Initialize()) {
+      RecordError("OnInit", "Failed to initialize order manager");
+      return CleanupAndFail();
+   }
+   
+   // Step 7: Initialize position manager with proper error handling
+   Logger.Info("Creating position manager...");
+   PosMgr = new CPositionManager(MagicNumber, InpTrailingEnabled, InpTrailingTrigger, 
+                               InpTrailingStep, InpEnablePartialClose, 
+                               InpPartialClosePercent);
+   if(PosMgr == NULL) {
+      RecordError("OnInit", "Failed to create position manager");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing position manager...");
+   if(!PosMgr.Initialize()) {
+      RecordError("OnInit", "Failed to initialize position manager");
+      return CleanupAndFail();
+   }
+   
+   // Step 8: Initialize liquidity analyzer with proper error handling
+   Logger.Info("Creating liquidity analyzer...");
+   LiquidityAnalyzer = new CLiquidityAnalyzer(InpSymbol);
+   if(LiquidityAnalyzer == NULL) {
+      RecordError("OnInit", "Failed to create liquidity analyzer");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing liquidity analyzer...");
+   if(!LiquidityAnalyzer.Initialize()) {
+      RecordError("OnInit", "Failed to initialize liquidity analyzer");
+      return CleanupAndFail();
+   }
+   
+   // Step 9: Set up trade object
+   Logger.Info("Setting up trade execution parameters...");
+   Trade.SetExpertMagicNumber(MagicNumber);
+   Trade.SetDeviationInPoints((ulong)InpSlippageInput);
+   Trade.SetMarginMode();
+   Trade.SetTypeFillingBySymbol(InpSymbol);
+   
+   // Store initial parameter values
+   CurrentATRMultiplierSL = InpATRMultiplierSLInput;
+   CurrentATRMultiplierTP = InpATRMultiplierTPInput;
+   
+   // Set initial liquidity state and market regime
+   CurrentLiquidityState = LIQUIDITY_MEDIUM; // Start with medium as default
+   CurrentMarketRegime = REGIME_CONSOLIDATION; // Start with consolidation as default
+   
+   // Step 10: Create initial strategy with proper error handling
+   Logger.Info("Creating initial trading strategy...");
+   
+   // Pass indicator manager to strategy factory
+   CurrentStrategy = CStrategyFactory::CreateStrategy(
+      CurrentLiquidityState, 
+      InpSymbol, 
+      InpTimeframe, 
+      InpRiskPercentInput,
+      IndicatorMgr  // Add indicator manager as parameter to CreateStrategy
+   );
+   
+   if(CurrentStrategy == NULL) {
+      RecordError("OnInit", "Failed to create trading strategy");
+      return CleanupAndFail();
+   }
+   
+   Logger.Info("Initializing trading strategy...");
+   if(!CurrentStrategy.Initialize()) {
+      RecordError("OnInit", "Failed to initialize trading strategy");
+      return CleanupAndFail();
+   }
+   
+   // Step 11: Initialize HFT Engine if enabled
+   if(InpEnableHFTEngine) {
+      Logger.Info("Creating HFT Engine...");
+      HFTEngine = new CHFTEngine(InpSymbol, InpHFTStrategy, Logger, IndicatorMgr, OrderMgr, MagicNumber);
+      
+      if(HFTEngine == NULL) {
+         RecordError("OnInit", "Failed to create HFT Engine");
+         return CleanupAndFail();
+      }
+      
+      Logger.Info("Initializing HFT Engine...");
+      if(!HFTEngine.Initialize(InpHFTRiskPercent, InpHFTMaxSpread)) {
+         RecordError("OnInit", "Failed to initialize HFT Engine");
+         return CleanupAndFail();
+      }
+      
+      // Configure HFT Engine
+      HFTEngine.SetVolumeConstraints(0.01, 0.5);
+      HFTEngine.SetTradeConstraints(InpHFTMaxTradesPerHour, InpHFTMaxConsecutiveLosses);
+      HFTEngine.SetRiskParameters(InpHFTRiskPercent, InpHFTMaxDailyLoss);
+      
+      Logger.Info("HFT Engine initialized successfully");
+   }
+   
+   // Step 12: Create information panel on chart
+   if(!IsInTester) {
+      Logger.Info("Creating info panel...");
+      CreateInfoPanel();
+   }
+   
+   // Step 13: Get initial bar time
+   LastBarTime = iTime(InpSymbol, InpTimeframe, 0);
+   
+   // System initialized successfully
+   SystemInitialized = true;
+   Logger.Info("NEWLIFE v4.0 initialized successfully with Magic: " + IntegerToString(MagicNumber));
+   
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason) {
+   // Log reason for deinitialization
+   string reasonStr = GetDeinitReasonText(reason);
+   if(Logger != NULL) {
+      Logger.Info("EA is shutting down. Reason: " + reasonStr);
+   } else {
+      Print("EA is shutting down. Reason: ", reasonStr);
+   }
+   
+   // Clean up created objects with proper null checks
+   if(CurrentStrategy != NULL) {
+      delete CurrentStrategy;
+      CurrentStrategy = NULL;
+   }
+   
+   if(HFTEngine != NULL) {
+      delete HFTEngine;
+      HFTEngine = NULL;
+   }
+   
+   if(LiquidityAnalyzer != NULL) {
+      delete LiquidityAnalyzer;
+      LiquidityAnalyzer = NULL;
+   }
+   
+   if(PosMgr != NULL) {
+      delete PosMgr;
+      PosMgr = NULL;
+   }
+   
+   if(OrderMgr != NULL) {
+      delete OrderMgr;
+      OrderMgr = NULL;
+   }
+   
+   if(RiskMgr != NULL) {
+      delete RiskMgr;
+      RiskMgr = NULL;
+   }
+   
+   if(IndicatorMgr != NULL) {
+      delete IndicatorMgr;
+      IndicatorMgr = NULL;
+   }
+   
+   // Log final summary if not in a test
+   if(!IsInTester && InpLogPerformance && Logger != NULL) {
+      Logger.LogPerformanceSummary(InitialBalance, 
+                                 AccountInfoDouble(ACCOUNT_BALANCE),
+                                 AccountInfoDouble(ACCOUNT_EQUITY),
+                                 PeakBalance,
+                                 TotalTradesHistory,
+                                 WinningTrades,
+                                 LosingTrades,
+                                 TotalProfit,
+                                 TotalLoss,
+                                 LargestProfit,
+                                 LargestLoss,
+                                 AverageHoldingTime,
+                                 ConsecutiveLosses);
+   }
+   
+   // Clean up chart objects
+   ObjectsDeleteAll(0, "NEWLIFE_");
+   
+   // Cleanup logger last (so it can log the other cleanup operations)
+   if(Logger != NULL) {
+      Logger.Error("Initialization failed");
+      delete Logger;
+      Logger = NULL;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick() {
+   // System health check with improved error handling
+   if(!SystemInitialized) {
+      Print("System not initialized, stopping EA");
+      ExpertRemove();
+      return;
+   }
+   
+   // Add protection against rapid tick processing
+   static datetime lastProcessedTick = 0;
+   datetime currentTickTime = TimeCurrent();
+   
+   // Skip processing if less than X milliseconds since last tick
+   if(currentTickTime == lastProcessedTick) {
+      return;
+   }
+   lastProcessedTick = currentTickTime;
+   
+   // Get current tick data with proper error handling
+   if(!SymbolInfoTick(InpSymbol, LastTick)) {
+      if(Logger != NULL) {
+         Logger.Error("Failed to get tick data");
+      }
+      return;
+   }
+   
+   // Check indicator values on first tick for validation
+   static bool firstTickProcessed = false;
+   if(!firstTickProcessed) {
+      firstTickProcessed = true;
+      if(IndicatorMgr != NULL) {
+         // Update indicators first
+         IndicatorMgr.UpdateIndicators();
+         
+         // Log initial indicator values for debugging
+         Logger.Info("Initial indicator values:");
+         Logger.Info("ATR: " + DoubleToString(IndicatorMgr.GetATR(), 5));
+         Logger.Info("RSI: " + DoubleToString(IndicatorMgr.GetRSI(), 2));
+         Logger.Info("ADX: " + DoubleToString(IndicatorMgr.GetADX(), 2));
+         Logger.Info("MA Trend: " + DoubleToString(IndicatorMgr.GetMATrend(), 5));
+         Logger.Info("MA Scalp: " + DoubleToString(IndicatorMgr.GetMAScalp(), 5));
+      }
+   }
+   
+   // Process HFT Engine if enabled
+   if(InpEnableHFTEngine && HFTEngine != NULL) {
+      HFTEngine.ProcessTick(LastTick);
+      
+      // Check if HFT Engine should take over trading
+      if(InpHFTAutoTakeover) {
+         if(!HFTEngineActive) {
+            // Check if main strategies are underperforming
+            if(DailyLoss > InpHFTMinProfitTarget && HFTEngine.GetProfitability() > 60.0) {
+               Logger.Info("HFT Engine taking over trading due to better performance");
+               HFTEngineActive = true;
+               TradingEnabled = false;
+            }
+         }
+         else {
+            // Check if HFT Engine is also underperforming
+            if(HFTEngine.GetProfitability() < 50.0) {
+               Logger.Info("Reverting to standard EA strategy");
+               HFTEngineActive = false;
+               TradingEnabled = true;
+            }
+         }
+      }
+      
+      // If HFT Engine is activated but not trading, check if it should be
+      if(HFTEngineActive && HFTEngine.GetState() != HFT_STATE_TRADING) {
+         if(HFTEngine.ShouldActivate()) {
+            HFTEngine.SetState(HFT_STATE_TRADING);
+            Logger.Info("HFT Engine activated for trading");
+         }
+      }
+   }
+   
+   // Update account metrics
+   UpdateAccountMetrics();
+   
+   // Process new bar logic if needed
+   bool isNewBar = ProcessBarUpdate();
+   
+   // Debug info about current state
+   static int debugCounter = 0;
+   debugCounter++;
+   
+   if(IsInTester && debugCounter % 100 == 0) {
+      string debugInfo = "Current state: Market Regime=" + EnumToString(CurrentMarketRegime) +
+                        ", Liquidity=" + EnumToString(CurrentLiquidityState) +
+                        ", Bars Since Trade=" + IntegerToString(BarsSinceLastTrade);
+      Logger.Debug(debugInfo);
+      
+      // Check indicators
+      if(IndicatorMgr != NULL) {
+         double atr = IndicatorMgr.GetATR();
+         double rsi = IndicatorMgr.GetRSI();
+         double adx = IndicatorMgr.GetADX();
+         
+         Logger.Debug("Indicators: ATR=" + DoubleToString(atr, 5) + 
+                     ", RSI=" + DoubleToString(rsi, 2) +
+                     ", ADX=" + DoubleToString(adx, 2));
+      }
+   }
+   
+   // Update market analysis
+   if(isNewBar || !InpUseNewCandle) {
+      // Update indicators with error handling
+      if(!IndicatorMgr.UpdateIndicators()) {
+         if(Logger != NULL) {
+            Logger.Warn("Failed to update indicators");
+         }
+         return;
+      }
+      
+      // Update market regime
+      ENUM_MARKET_REGIME previousRegime = CurrentMarketRegime;
+      CurrentMarketRegime = IndicatorMgr.DetermineMarketRegime();
+      
+      if(previousRegime != CurrentMarketRegime) {
+         if(Logger != NULL) {
+            Logger.Info("Market regime changed from " + EnumToString(previousRegime) + 
+                      " to " + EnumToString(CurrentMarketRegime));
+         }
+      }
+      
+      // Update liquidity state
+      if(LiquidityAnalyzer != NULL) {
+         LiquidityAnalyzer.Update(LastTick);
+         ENUM_LIQUIDITY_STATE newLiquidityState = LiquidityAnalyzer.GetCurrentState();
+      
+         // If liquidity state changed, switch strategy
+         if(newLiquidityState != CurrentLiquidityState) {
+            SwitchStrategy(newLiquidityState);
+         }
+      }
+      
+      // Check for trading opportunities (only if HFT Engine isn't active)
+      if(!HFTEngineActive && CanTrade()) {
+         // Trading is allowed
+         if(TryEnterPosition()) {
+            // Position was opened
+            BarsSinceLastTrade = 0;
+            LastTradeTime = TimeCurrent();
+            ForcedTradeAttempted = false;  // Reset forced trade flag on successful trade
+         }
+      }
+   }
+   
+   // Always manage existing positions regardless of bar status
+   if(PosMgr != NULL) {
+      PosMgr.ManagePositions(LastTick, IndicatorMgr);
+   }
+   
+   // Process pending orders from queue if any
+   if(OrderMgr != NULL) {
+      OrderMgr.ProcessQueue();
+   }
+   
+   // Update visual information on chart - limit frequency to avoid overload
+   if(!IsInTester && (TimeCurrent() % 5 == 0)) {
+      UpdateInfoPanel();
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if we can trade based on all filtering conditions          |
+//+------------------------------------------------------------------+
+bool CanTrade() {
+   // If HFT Engine is active, main EA should not trade
+   if(HFTEngineActive && InpEnableHFTEngine) {
+      return false;
+   }
+   
+   // Already have positions?
+   int openPositions = PositionsTotal();
+   for(int i = 0; i < openPositions; i++) {
+      // Need to select the position first
+      if(!PositionGetTicket(i)) continue;
+      
+      // Check if it belongs to this EA
+      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber) {
+         if(Logger != NULL) {
+            Logger.Debug("Already have open positions with our magic number");
+         }
+         return false;
+      }
+   }
+   
+   // In tester, we can be more lenient with some checks
+   if(IsInTester && InpUseLessRestrictiveRules) {
+      // Skip certain checks in tester mode for testing purposes
+   } else {
+      // Check if trading is halted
+      datetime currentTime = TimeCurrent();
+      if(currentTime < TradingHaltUntil) {
+         if(Logger != NULL) {
+            Logger.Debug("Trading halted until " + TimeToString(TradingHaltUntil));
+         }
+         return false;
+      }
+      
+      // Check daily trade limit
+      if(TotalTradesToday >= InpMaxTradesPerDay) {
+         if(Logger != NULL) {
+            Logger.Debug("Daily trade limit reached: " + IntegerToString(TotalTradesToday) + 
+                      "/" + IntegerToString(InpMaxTradesPerDay));
+         }
+         return false;
+      }
+      
+      // Check total trade limit
+      if(TotalTradesHistory >= InpMaxTrades) {
+         if(Logger != NULL) {
+            Logger.Debug("Total trade limit reached");
+         }
+         return false;
+      }
+      
+      // Check time between trades
+      if(currentTime - LastTradeTime < InpMinTimeBetweenTrades) {
+         if(Logger != NULL) {
+            Logger.Debug("Minimum time between trades not elapsed");
+         }
+         return false;
+      }
+      
+      // Check spread conditions
+      double currentSpread = (LastTick.ask - LastTick.bid) / SymbolInfo.Point();
+      if(currentSpread > InpMaxSpread) {
+         if(Logger != NULL) {
+            Logger.Debug("Spread too high: " + DoubleToString(currentSpread, 1) + 
+                       " > " + DoubleToString(InpMaxSpread, 1));
+         }
+         return false;
+      }
+      
+      // Check for weekend trading restriction
+      if(InpAvoidWeekendTrading && IsWeekend()) {
+         if(Logger != NULL) {
+            Logger.Debug("Weekend trading is restricted");
+         }
+         return false;
+      }
+      
+      // Check for holiday trading restriction
+      if(InpAvoidHolidayTrading && IsHoliday()) {
+         if(Logger != NULL) {
+            Logger.Debug("Holiday trading is restricted");
+         }
+         return false;
+      }
+      
+      // Check if we're in active session
+      if(!IsInTradingSession()) {
+         if(Logger != NULL) {
+            Logger.Debug("Not in active trading session");
+         }
+         return false;
+      }
+      
+      // Check for news events if enabled
+      if(InpUseNewsFilter && IsInNewsWindow()) {
+         if(Logger != NULL) {
+            Logger.Debug("In news event window, trading restricted");
+         }
+         return false;
+      }
+   }
+   
+   // All checks passed, can trade
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Try to enter a new position if conditions are favorable          |
+//+------------------------------------------------------------------+
+bool TryEnterPosition() {
+   // Check if strategy is available
+   if(CurrentStrategy == NULL) {
+      if(Logger != NULL) {
+         Logger.Error("No strategy available");
+      }
+      return false;
+   }
+   
+   // Try to get entry signal from strategy with error handling
+   ENUM_ORDER_TYPE orderType = ORDER_TYPE_BUY; // Default initialization
+   
+   // Use standard error handling instead of try-catch
+   string errorMessage = "";
+   bool success = false;
+   
+   // Fixed the duplicate success check
+   success = CurrentStrategy.DetectEntrySignal(orderType);
+   
+   if(!success) {
+      // If error in DetectEntrySignal
+      if(GetLastError() != 0) {
+         errorMessage = "Error in DetectEntrySignal: " + IntegerToString(GetLastError());
+         if(Logger != NULL) {
+            Logger.Error(errorMessage);
+         }
+      } else {
+         // No error but no signal
+         if(Logger != NULL && debugCounter % 100 == 0) {
+            Logger.Debug("No entry signal detected");
+         }
+      }
+      // No entry signal
+      return false;
+   }
+   
+   // We have a signal, prepare to enter
+   if(Logger != NULL) {
+      Logger.Info("Entry signal detected: " + EnumToString(orderType));
+   }
+   
+   // Calculate entry price
+   double entryPrice = (orderType == ORDER_TYPE_BUY) ? LastTick.ask : LastTick.bid;
+   
+   // Calculate SL and TP with proper error handling
+   double stopLoss = 0, takeProfit = 0;
+   
+   // Call CalculateSLTP directly (it's a void method that modifies the parameters)
+   CurrentStrategy.CalculateSLTP(orderType, entryPrice, stopLoss, takeProfit);
+   
+   // Check results
+   if(stopLoss <= 0 || takeProfit <= 0 || GetLastError() != 0) {
+      // If error in CalculateSLTP
+      errorMessage = "Error in CalculateSLTP: " + IntegerToString(GetLastError()) + 
+                     ", SL=" + DoubleToString(stopLoss, SymbolInfo.Digits()) + 
+                     ", TP=" + DoubleToString(takeProfit, SymbolInfo.Digits());
+      if(Logger != NULL) {
+         Logger.Error(errorMessage);
+      }
+      return false;
+   }
+   
+   // Validate SL and TP
+   if(!ValidateStopLevels(orderType, entryPrice, stopLoss, takeProfit)) {
+      if(Logger != NULL) {
+         Logger.Warn("Invalid stop levels, skipping trade");
+      }
+      return false;
+   }
+   
+   // Calculate position size with proper error handling
+   double volume = 0.01; // Default minimum volume as fallback
+   
+   volume = CurrentStrategy.GetPositionSize(orderType, entryPrice, stopLoss);
+   
+   if(volume <= 0) {
+      // If error in GetPositionSize
+      if(GetLastError() != 0) {
+         errorMessage = "Error in GetPositionSize: " + IntegerToString(GetLastError());
+         if(Logger != NULL) {
+            Logger.Error(errorMessage);
+         }
+      } else {
+         // No error but invalid volume
+         if(Logger != NULL) {
+            Logger.Warn("Strategy returned invalid position size: " + DoubleToString(volume, 2));
+         }
+      }
+      // Continue with minimum size as fallback
+      volume = SymbolInfo.LotsMin();
+   }
+   
+   if(volume < SymbolInfo.LotsMin()) {
+      if(Logger != NULL) {
+         Logger.Warn("Position size too small: " + DoubleToString(volume, 2) + 
+                  ", using minimum: " + DoubleToString(SymbolInfo.LotsMin(), 2));
+      }
+      volume = SymbolInfo.LotsMin();
+   }
+   
+   // Execute the trade with proper error handling
+   string comment = "NEWLIFE v4.0 - " + EnumToString(CurrentMarketRegime);
+   bool result = false;
+   
+   if(OrderMgr != NULL) {
+      result = OrderMgr.ExecuteMarketOrder(orderType, volume, entryPrice, stopLoss, takeProfit, comment);
+   } else {
+      // Fallback direct execution if OrderMgr is not available
+      if(orderType == ORDER_TYPE_BUY) {
+         result = Trade.Buy(volume, InpSymbol, 0, stopLoss, takeProfit, comment);
+      } else {
+         result = Trade.Sell(volume, InpSymbol, 0, stopLoss, takeProfit, comment);
+      }
+   }
+   
+   if(result) {
+      // Trade executed successfully
+      TotalTradesHistory++;
+      TotalTradesToday++;
+      LastTradeTime = TimeCurrent();
+      BarsSinceLastTrade = 0;
+      
+      if(Logger != NULL) {
+         Logger.Info("Position opened: " + EnumToString(orderType) + 
+                  ", Volume: " + DoubleToString(volume, 2) + 
+                  ", Entry: " + DoubleToString(entryPrice, SymbolInfo.Digits()) + 
+                  ", SL: " + DoubleToString(stopLoss, SymbolInfo.Digits()) + 
+                  ", TP: " + DoubleToString(takeProfit, SymbolInfo.Digits()));
+      }
+                
+      return true;
+   } else {
+      if(Logger != NULL) {
+         Logger.Error("Failed to open position: " + IntegerToString(Trade.ResultRetcode()) + 
+                    ", " + Trade.ResultRetcodeDescription());
+      }
+      return false;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Process beginning of new bar, return true if it's a new bar      |
+//+------------------------------------------------------------------+
+bool ProcessBarUpdate() {
+   datetime currentBarTime = iTime(InpSymbol, InpTimeframe, 0);
+   
+   if(currentBarTime > LastBarTime) {
+      // New bar detected
+      LastBarTime = currentBarTime;
+      BarsSinceLastTrade++;
+      
+      if(Logger != NULL) {
+         Logger.Debug("New bar detected at " + TimeToString(currentBarTime) + 
+                     ", bars since last trade: " + IntegerToString(BarsSinceLastTrade));
+         
+         // Print some bar data for debugging
+         double open = iOpen(InpSymbol, InpTimeframe, 0);
+         double high = iHigh(InpSymbol, InpTimeframe, 0);
+         double low = iLow(InpSymbol, InpTimeframe, 0);
+         double close = iClose(InpSymbol, InpTimeframe, 0);
+         
+         Logger.Debug("Bar data: O=" + DoubleToString(open, SymbolInfo.Digits()) + 
+                     ", H=" + DoubleToString(high, SymbolInfo.Digits()) + 
+                     ", L=" + DoubleToString(low, SymbolInfo.Digits()) + 
+                     ", C=" + DoubleToString(close, SymbolInfo.Digits()));
+      }
+      
+      return true;
+   }
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Switch to a different strategy based on liquidity state          |
+//+------------------------------------------------------------------+
+void SwitchStrategy(ENUM_LIQUIDITY_STATE newState) {
+   // Log the strategy change
+   if(Logger != NULL) {
+      Logger.Info("Changing liquidity state from " + EnumToString(CurrentLiquidityState) + 
+                " to " + EnumToString(newState));
+   }
+   
+   // Clean up current strategy
+   if(CurrentStrategy != NULL) {
+      delete CurrentStrategy;
+      CurrentStrategy = NULL;
+   }
+   
+   // Create new strategy based on the state
+   CurrentStrategy = CStrategyFactory::CreateStrategy(
+      newState, 
+      InpSymbol, 
+      InpTimeframe, 
+      InpRiskPercentInput,
+      IndicatorMgr  // Pass indicator manager to factory
+   );
+   
+   if(CurrentStrategy == NULL) {
+      if(Logger != NULL) {
+         Logger.Error("Failed to create new strategy for state: " + EnumToString(newState));
+      }
+      return;
+   }
+   
+   if(!CurrentStrategy.Initialize()) {
+      if(Logger != NULL) {
+         Logger.Error("Failed to initialize new strategy for state: " + EnumToString(newState));
+      }
+      delete CurrentStrategy;
+      CurrentStrategy = NULL;
+      return;
+   }
+   
+   // Update current state
+   CurrentLiquidityState = newState;
+   
+   // Adjust risk parameters based on new liquidity state
+   switch(newState) {
+      case LIQUIDITY_HIGH:
+         // Slightly more aggressive in high liquidity
+         CurrentRiskMultiplier = 1.1;
+         CurrentATRMultiplierSL = InpATRMultiplierSLInput * 0.9;
+         CurrentATRMultiplierTP = InpATRMultiplierTPInput * 1.1;
+         break;
+         
+      case LIQUIDITY_MEDIUM:
+         // Standard parameters for medium liquidity
+         CurrentRiskMultiplier = 1.0;
+         CurrentATRMultiplierSL = InpATRMultiplierSLInput;
+         CurrentATRMultiplierTP = InpATRMultiplierTPInput;
+         break;
+         
+      case LIQUIDITY_LOW:
+         // More conservative in low liquidity
+         CurrentRiskMultiplier = 0.7;
+         CurrentATRMultiplierSL = InpATRMultiplierSLInput * 1.3;
+         CurrentATRMultiplierTP = InpATRMultiplierTPInput * 0.8;
+         break;
+   }
+   
+   if(Logger != NULL) {
+      Logger.Info("New strategy activated: " + CurrentStrategy.GetName() + 
+                ", Risk multiplier: " + DoubleToString(CurrentRiskMultiplier, 2));
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Update account metrics and check risk thresholds                 |
+//+------------------------------------------------------------------+
+void UpdateAccountMetrics() {
+   double currentBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   
+   // Initialize on first run
+   if(!InitialBalanceSet) {
+      InitialBalance = currentBalance;
+      PeakBalance = currentBalance;
+      EquityHigh = currentEquity;
+      InitialBalanceSet = true;
+      return;
+   }
+   
+   // Track peak balance
+   if(currentBalance > PeakBalance) {
+      PeakBalance = currentBalance;
+   }
+   
+   // Track highest equity today
+   MqlDateTime now;
+   static int lastDay = -1;
+   TimeToStruct(TimeCurrent(), now);
+   
+   if(now.day != lastDay) {
+      // Reset daily tracking
+      lastDay = now.day;
+      EquityHigh = currentEquity;
+      TotalTradesToday = 0;
+      DailyLoss = 0.0;
+      ForcedTradeAttempted = false;  // Reset forced trade flag on new day
+   } else if(currentEquity > EquityHigh) {
+      EquityHigh = currentEquity;
+   }
+   
+   // Calculate daily loss percentage
+   if(EquityHigh > 0) {
+      DailyLoss = (EquityHigh - currentEquity) / EquityHigh * 100.0;
+   }
+   
+   // Check maximum daily loss
+   if(DailyLoss >= InpMaxDailyLoss && EquityHigh > 0 && !IsInTester) {
+      if(Logger != NULL) {
+         Logger.Warn("Daily maximum loss reached: " + DoubleToString(DailyLoss, 2) + "% > " + 
+                  DoubleToString(InpMaxDailyLoss, 2) + "%");
+      }
+                
+      if(InpEnableEmergencyStop) {
+         // Close all positions
+         if(PosMgr != NULL) {
+            PosMgr.CloseAllPositions("Daily loss limit reached");
+         } else {
+            // Fallback: Direct position closing
+            CloseAllPositions();
+         }
+         
+         // Halt trading for the rest of the day
+         MqlDateTime tomorrow;
+         TimeToStruct(TimeCurrent(), tomorrow);
+         tomorrow.day += 1;
+         tomorrow.hour = 0;
+         tomorrow.min = 0;
+         tomorrow.sec = 0;
+         
+         TradingHaltUntil = StructToTime(tomorrow);
+         if(Logger != NULL) {
+            Logger.Error("Trading halted until tomorrow due to daily loss limit");
+         }
+      }
+   }
+   
+   // Update risk manager with latest metrics
+   if(RiskMgr != NULL) {
+      RiskMgr.UpdateMetrics(currentBalance, currentEquity, DailyLoss, ConsecutiveLosses);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if current time is within weekend trading restrictions     |
+//+------------------------------------------------------------------+
+bool IsWeekend() {
+   if(!InpAvoidWeekendTrading) return false;
+   
+   MqlDateTime time;
+   TimeToStruct(TimeGMT(), time);
+   
+   // Check if it's Friday after 20:00 or weekend
+   if((time.day_of_week == 5 && time.hour >= 20) || 
+      time.day_of_week == 6 || 
+      time.day_of_week == 0) {
+      return true;
+   }
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Check if current date is a holiday                               |
+//+------------------------------------------------------------------+
+bool IsHoliday() {
+   if(!InpAvoidHolidayTrading) return false;
+   
+   // Major holidays (YYYY.MM.DD format)
+   string holidays[] = {"2025.01.01", "2025.12.25", "2025.12.31"};
+   
+   string currentDate = TimeToString(TimeCurrent(), TIME_DATE);
+   
+   for(int i = 0; i < ArraySize(holidays); i++) {
+      if(currentDate == holidays[i]) {
+         return true;
+      }
+   }
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Check if we're in an active trading session                      |
+//+------------------------------------------------------------------+
+bool IsInTradingSession() {
+   // In tester mode, always consider it an active session if desired
+   if(IsInTester && InpUseLessRestrictiveRules) return true;
+   
+   MqlDateTime time;
+   TimeToStruct(TimeGMT(), time);
+   int hour = time.hour;
+   
+   switch(InpActiveSession) {
+      case SESSION_ASIAN:
+         return (hour >= 0 && hour < 8);
+         
+      case SESSION_LONDON_NY:
+         return (hour >= 8 && hour < 20);
+         
+      case SESSION_ALL:
+         return true;
+         
+      default:
+         return true;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if we're in a news event window                            |
+//+------------------------------------------------------------------+
+bool IsInNewsWindow() {
+   // In tester mode, ignore news if desired
+   if(IsInTester && InpUseLessRestrictiveRules) return false;
+   
+   // This is a placeholder. In a real implementation, you'd check against
+   // an economic calendar API or data source for high-impact news events
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Validate stop loss and take profit levels                        |
+//+------------------------------------------------------------------+
+bool ValidateStopLevels(ENUM_ORDER_TYPE orderType, double entryPrice, double stopLoss, double takeProfit) {
+   if(entryPrice <= 0 || stopLoss <= 0 || takeProfit <= 0) {
+      if(Logger != NULL) {
+         Logger.Error("Invalid entry/SL/TP values: Entry=" + DoubleToString(entryPrice, SymbolInfo.Digits()) + 
+                     ", SL=" + DoubleToString(stopLoss, SymbolInfo.Digits()) + 
+                     ", TP=" + DoubleToString(takeProfit, SymbolInfo.Digits()));
+      }
+      return false;
+   }
+   
+   // Check if SL is in correct direction
+   if((orderType == ORDER_TYPE_BUY && stopLoss >= entryPrice) ||
+      (orderType == ORDER_TYPE_SELL && stopLoss <= entryPrice)) {
+      if(Logger != NULL) {
+         Logger.Warn("Stop loss in wrong direction");
+      }
+      return false;
+   }
+   
+   // Check if TP is in correct direction
+   if((orderType == ORDER_TYPE_BUY && takeProfit <= entryPrice) ||
+      (orderType == ORDER_TYPE_SELL && takeProfit >= entryPrice)) {
+      if(Logger != NULL) {
+         Logger.Warn("Take profit in wrong direction");
+      }
+      return false;
+   }
+   
+   // Get minimum allowed stop level distance
+   long stopLevel = SymbolInfo.StopsLevel();
+   double minDistance = stopLevel * SymbolInfo.Point();
+   
+   // Check SL distance
+   double slDistance = MathAbs(entryPrice - stopLoss);
+   if(slDistance < minDistance) {
+      if(Logger != NULL) {
+         Logger.Warn("Stop loss too close: " + DoubleToString(slDistance / SymbolInfo.Point(), 1) + 
+                  " pts, required: " + DoubleToString(stopLevel, 0) + " pts");
+      }
+      return false;
+   }
+   
+   // Check TP distance
+   double tpDistance = MathAbs(entryPrice - takeProfit);
+   if(tpDistance < minDistance) {
+      if(Logger != NULL) {
+         Logger.Warn("Take profit too close: " + DoubleToString(tpDistance / SymbolInfo.Point(), 1) + 
+                  " pts, required: " + DoubleToString(stopLevel, 0) + " pts");
+      }
+      return false;
+   }
+   
+   // Calculate risk:reward ratio
+   double riskReward = tpDistance / slDistance;
+   
+   // In tester mode, we can be less strict with risk:reward
+   double minRiskReward = MIN_RISK_REWARD_RATIO;
+   if(IsInTester && InpUseLessRestrictiveRules) {
+      minRiskReward = 0.5; // More lenient in tester
+   }
+   
+   if(riskReward < minRiskReward) {
+      if(Logger != NULL) {
+         Logger.Warn("Risk-reward ratio too low: " + DoubleToString(riskReward, 2) + ", required: " + 
+                  DoubleToString(minRiskReward, 2));
+      }
+      return false;
+   }
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Generate a unique magic number for this EA instance              |
+//+------------------------------------------------------------------+
+int GenerateUniqueMagicNumber(int baseMagic, string symbol) {
+   int symbolHash = 0;
+   for(int i = 0; i < StringLen(symbol); i++) {
+      symbolHash += StringGetCharacter(symbol, i);
+   }
+   
+   MathSrand(GetTickCount());
+   int randomPart = MathRand() % 1000;
+   
+   return baseMagic + symbolHash % 1000 + randomPart;
+}
+
+//+------------------------------------------------------------------+
+//| Create informational panel on chart                              |
+//+------------------------------------------------------------------+
+void CreateInfoPanel() {
+   // Create EA identifier label
+   ObjectCreate(0, "NEWLIFE_Label", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, "NEWLIFE_Label", OBJPROP_TEXT, "NEWLIFE v4.0 - Magic: " + IntegerToString(MagicNumber));
+   ObjectSetInteger(0, "NEWLIFE_Label", OBJPROP_COLOR, clrMediumSpringGreen);
+   ObjectSetInteger(0, "NEWLIFE_Label", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, "NEWLIFE_Label", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Label", OBJPROP_YDISTANCE, 20);
+   ObjectSetInteger(0, "NEWLIFE_Label", OBJPROP_FONTSIZE, 10);
+   
+   // Create status label
+   ObjectCreate(0, "NEWLIFE_Status", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, "NEWLIFE_Status", OBJPROP_TEXT, "Initializing...");
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_COLOR, clrLightSkyBlue);
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_YDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_FONTSIZE, 9);
+   
+   // Create liquidity status label
+   ObjectCreate(0, "NEWLIFE_Liquidity", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, "NEWLIFE_Liquidity", OBJPROP_TEXT, "Liquidity: Medium");
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_COLOR, clrOrange);
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_YDISTANCE, 20);
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_FONTSIZE, 10);
+   
+   // Create error status label
+   ObjectCreate(0, "NEWLIFE_Error", OBJ_LABEL, 0, 0, 0);
+   ObjectSetString(0, "NEWLIFE_Error", OBJPROP_TEXT, "No errors");
+   ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_COLOR, clrGreen);
+   ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+   ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_YDISTANCE, 10);
+   ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_FONTSIZE, 9);
+   
+   // Create HFT Engine status label
+   if(InpEnableHFTEngine) {
+      ObjectCreate(0, "NEWLIFE_HFT", OBJ_LABEL, 0, 0, 0);
+      ObjectSetString(0, "NEWLIFE_HFT", OBJPROP_TEXT, "HFT: Initializing...");
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_COLOR, clrYellow);
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_XDISTANCE, 10);
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_YDISTANCE, 40);
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_FONTSIZE, 9);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Update information panel on chart                                |
+//+------------------------------------------------------------------+
+void UpdateInfoPanel() {
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double profit = AccountInfoDouble(ACCOUNT_PROFIT);
+   
+   // Format status text
+   string statusText = "Balance: " + DoubleToString(balance, 2) +
+                       " | Equity: " + DoubleToString(equity, 2) +
+                       " | P/L: " + DoubleToString(profit, 2) +
+                       " | Daily Loss: " + DoubleToString(DailyLoss, 2) + "%" +
+                       " | Trades: " + IntegerToString(PositionsTotal()) +
+                       " | Regime: " + EnumToString(CurrentMarketRegime);
+                       
+   // Update status label
+   ObjectSetString(0, "NEWLIFE_Status", OBJPROP_TEXT, statusText);
+   
+   // Set color based on profit
+   color statusColor = (profit >= 0) ? clrMediumSpringGreen : clrRed;
+   ObjectSetInteger(0, "NEWLIFE_Status", OBJPROP_COLOR, statusColor);
+   
+   // Update liquidity status label
+   string liquidityText = "Liquidity: " + EnumToString(CurrentLiquidityState);
+   ObjectSetString(0, "NEWLIFE_Liquidity", OBJPROP_TEXT, liquidityText);
+   
+   // Set color based on liquidity state
+   color liquidityColor = clrOrange;
+   switch(CurrentLiquidityState) {
+      case LIQUIDITY_HIGH:
+         liquidityColor = clrMediumSpringGreen;
+         break;
+      case LIQUIDITY_MEDIUM:
+         liquidityColor = clrOrange;
+         break;
+      case LIQUIDITY_LOW:
+         liquidityColor = clrRed;
+         break;
+   }
+   ObjectSetInteger(0, "NEWLIFE_Liquidity", OBJPROP_COLOR, liquidityColor);
+   
+   // Update HFT Engine status
+   if(InpEnableHFTEngine && HFTEngine != NULL) {
+      string hftStatus = "HFT: " + HFTEngine.GetStateAsString() + 
+                     ", Win Rate: " + DoubleToString(HFTEngine.GetPerformanceMetrics().winRate, 1) + "%";
+      
+      ObjectSetString(0, "NEWLIFE_HFT", OBJPROP_TEXT, hftStatus);
+      
+      // Set color based on state
+      color hftColor = clrYellow;
+      if(HFTEngine.GetState() == HFT_STATE_TRADING) {
+         hftColor = clrLime;
+      } else if(HFTEngine.GetState() == HFT_STATE_COOLDOWN) {
+         hftColor = clrOrange;
+      } else if(HFTEngine.GetState() == HFT_STATE_ERROR) {
+         hftColor = clrRed;
+      }
+      
+      ObjectSetInteger(0, "NEWLIFE_HFT", OBJPROP_COLOR, hftColor);
+   }
+   
+   // Update error status
+   if(LastErrorTime > 0) {
+      string errorText = LastErrorSource + ": " + LastErrorMessage;
+      ObjectSetString(0, "NEWLIFE_Error", OBJPROP_TEXT, errorText);
+      ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_COLOR, clrRed);
+   } else {
+      ObjectSetString(0, "NEWLIFE_Error", OBJPROP_TEXT, "No errors");
+      ObjectSetInteger(0, "NEWLIFE_Error", OBJPROP_COLOR, clrGreen);
+   }
+   
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Record an error for tracking and display                         |
+//+------------------------------------------------------------------+
+void RecordError(string source, string message) {
+   LastErrorSource = source;
+   LastErrorMessage = message;
+   LastErrorTime = TimeCurrent();
+   
+   if(Logger != NULL) {
+      Logger.Error(source + ": " + message);
+   } else {
+      Print("ERROR: ", source, ": ", message);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Clean up all components and return INIT_FAILED                   |
+//+------------------------------------------------------------------+
+int CleanupAndFail() {
+   // Print last error
+   Print("Initialization failed: ", LastErrorSource, ": ", LastErrorMessage);
+   
+   // Clean up created objects with null checks
+   if(CurrentStrategy != NULL) {
+      delete CurrentStrategy;
+      CurrentStrategy = NULL;
+   }
+   
+   if(HFTEngine != NULL) {
+      delete HFTEngine;
+      HFTEngine = NULL;
+   }
+   
+   if(LiquidityAnalyzer != NULL) {
+      delete LiquidityAnalyzer;
+      LiquidityAnalyzer = NULL;
+   }
+   
+   if(PosMgr != NULL) {
+      delete PosMgr;
+      PosMgr = NULL;
+   }
+   
+   if(OrderMgr != NULL) {
+      delete OrderMgr;
+      OrderMgr = NULL;
+   }
+   
+   if(RiskMgr != NULL) {
+      delete RiskMgr;
+      RiskMgr = NULL;
+   }
+   
+   if(IndicatorMgr != NULL) {
+      delete IndicatorMgr;
+      IndicatorMgr = NULL;
+   }
+   
+   // Logger should be deleted last
+   if(Logger != NULL) {
+      Logger.Error("Initialization failed");
+      delete Logger;
+      Logger = NULL;
+   }
+   
+   // Reset initialization flag
+   SystemInitialized = false;
+   
+   return INIT_FAILED;
+}
+
+//+------------------------------------------------------------------+
+//| Fallback function to close all positions                         |
+//+------------------------------------------------------------------+
+void CloseAllPositions() {
+   int total = PositionsTotal();
+   for(int i = total - 1; i >= 0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0) {
+         if(PositionGetInteger(POSITION_MAGIC) == MagicNumber) {
+            if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) {
+               Trade.PositionClose(ticket);
+            } else {
+               Trade.PositionClose(ticket);
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Get text description of deinitialization reason                  |
+//+------------------------------------------------------------------+
+string GetDeinitReasonText(int reason) {
+   switch(reason) {
+      case REASON_PROGRAM: return "Program";
+      case REASON_REMOVE: return "Removed from chart";
+      case REASON_RECOMPILE: return "Recompiled";
+      case REASON_CHARTCHANGE: return "Chart symbol/period changed";
+      case REASON_CHARTCLOSE: return "Chart closed";
+      case REASON_PARAMETERS: return "Parameters changed";
+      case REASON_ACCOUNT: return "Account changed";
+      case REASON_TEMPLATE: return "Template applied";
+      case REASON_INITFAILED: return "Initialization failed";
+      case REASON_CLOSE: return "Terminal closed";
+      default: return "Unknown reason: " + IntegerToString(reason);
+   }
+}
